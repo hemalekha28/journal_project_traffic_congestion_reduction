@@ -13,7 +13,7 @@ def fuzzy_kmeans(data, n_clusters=3, m=2, max_iter=100):
 
     for iteration in range(max_iter):
         for j in range(n_clusters):
-            weights = membership[:, j] ** m
+            weights = np.maximum(membership[:, j] ** m, 1e-10)
             centers[j] = np.average(data, axis=0, weights=weights)
 
         new_membership = np.zeros((n_samples, n_clusters))
@@ -43,12 +43,10 @@ def fuzzy_kmeans(data, n_clusters=3, m=2, max_iter=100):
 def get_route_congestion(fused_df):
     """Get congestion level per route using FKM"""
 
-    parameters = [
-        'speed', 'co_emission',
-        'co2_emission', 'nox_emission',
-        'fuel_consumption'
-    ]
-
+    # Dynamically select numeric parameters, excluding IDs and time
+    parameters = [col for col in fused_df.columns if col not in ['route_id', 'vehicle_id', 'time_step', 'segment_id'] and pd.api.types.is_numeric_dtype(fused_df[col])]
+    print(f"Using parameters for FKM: {parameters}")
+    
     route_results = {}
 
     for route_id in fused_df['route_id'].unique():
