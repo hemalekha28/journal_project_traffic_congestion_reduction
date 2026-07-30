@@ -30,8 +30,8 @@ def calculate_congestion_score(route_means_df):
     scores_df = scores_df.sort_values('congestion_score', ascending=False)
     scores_df['rank'] = range(1, len(scores_df) + 1)
     scores_df['status'] = scores_df['congestion_score'].apply(
-        lambda x: 'HIGH' if x > scores_df['congestion_score'].quantile(0.66)
-        else ('MEDIUM' if x > scores_df['congestion_score'].quantile(0.33)
+        lambda x: 'HIGH' if x > scores_df['congestion_score'].quantile(0.75)
+        else ('MEDIUM' if x > scores_df['congestion_score'].quantile(0.50)
         else 'LOW')
     )
 
