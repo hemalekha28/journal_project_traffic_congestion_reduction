@@ -1,0 +1,5 @@
+Variant,FAHP_Mean,FAHP_Std,FAHP_Improv_%,Entropy_Mean,Entropy_Std,Entropy_Improv_%
+Heavy_20,951.99,6.73,39.77,1500.21,50.72,35.54
+Primary_50,1149.02,4.99,27.3,2027.14,49.8,12.9
+Heavy_80,1262.0,14.66,20.15,1903.23,96.33,18.22
+Broad_50,1058.88,5.09,33.0,1769.28,20.15,23.98

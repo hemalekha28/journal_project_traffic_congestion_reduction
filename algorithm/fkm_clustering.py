@@ -3,9 +3,12 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
 
-def fuzzy_kmeans(data, n_clusters=3, m=2, max_iter=100):
+def fuzzy_kmeans(data, n_clusters=3, m=2, max_iter=100, random_seed=None):
     """Fuzzy K-Means Clustering (matches base paper's FKM formulation)"""
     n_samples = len(data)
+
+    if random_seed is not None:
+        np.random.seed(random_seed)
 
     membership = np.random.dirichlet(np.ones(n_clusters), size=n_samples)
 
@@ -40,7 +43,7 @@ def fuzzy_kmeans(data, n_clusters=3, m=2, max_iter=100):
     return centers, membership
 
 
-def get_route_congestion(fused_df):
+def get_route_congestion(fused_df, random_seed=None):
     """Get congestion level per route using FKM"""
 
     # Dynamically select numeric parameters, excluding IDs and time
@@ -58,7 +61,7 @@ def get_route_congestion(fused_df):
         scaler = StandardScaler()
         route_scaled = scaler.fit_transform(route_data)
 
-        centers, membership = fuzzy_kmeans(route_scaled, n_clusters=3)
+        centers, membership = fuzzy_kmeans(route_scaled, n_clusters=3, random_seed=random_seed)
 
         mean_center = np.mean(centers, axis=0)
         mean_original = scaler.inverse_transform(mean_center.reshape(1, -1))[0]
