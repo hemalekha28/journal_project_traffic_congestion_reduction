@@ -1,16 +1,23 @@
-# React + Vite
+# 🗺️ TrafficIQ Web Dashboard (React + Leaflet + Recharts)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+This repository contains the frontend web dashboard for the **TrafficIQ Smart Urban Mobility AI Platform**.
 
-Currently, two official plugins are available:
+## Key Features
+- **Google Maps Navigation View**: Interactive Leaflet map with speech bubble route badges (`₹25 · 21 min`).
+- **Multi-Modal Transport Selector**: Filter by Car (🚗), Two-Wheeler (🛵), EV (⚡), or Freight Truck (🚛).
+- **AI Traffic Forecasting**: 60-minute time-series area charts (`AreaChart`).
+- **Adaptive Traffic Signal Control (ASCS)**: Real-time green light phase extensions (+0s to +25s).
+- **Emergency Vehicle Priority**: One-click Ambulance Green Wave override.
+- **Incident Injector**: Simulate Accidents, Heavy Rain, or Construction.
+- **Explainable AI (XAI)**: Natural language bottleneck rationales.
+- **Eco-Routing**: Carbon offset tracking & fuel cost savings in Indian Rupees (₹).
+- **VANET V2X Mesh Inspector**: Packet Delivery Ratio (PDR %), Latency, & RSU status monitoring.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Getting Started
 
-## React Compiler
+```bash
+npm install
+npm run dev
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+Open `http://localhost:5173` to access the dashboard.
