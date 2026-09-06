@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
@@ -29,11 +30,16 @@
 }
 
 * {
+=======
+/* Base reset — App.css handles all styling */
+*, *::before, *::after {
+>>>>>>> origin/feature/dashboard-api-fixes
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
+<<<<<<< HEAD
 body {
   font-family: var(--font-sans);
   background-color: var(--bg-app);
@@ -45,4 +51,14 @@ body {
 h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   line-height: 1.25;
+=======
+html, body, #root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+>>>>>>> origin/feature/dashboard-api-fixes
 }
