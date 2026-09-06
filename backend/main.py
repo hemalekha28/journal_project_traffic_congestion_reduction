@@ -284,15 +284,57 @@ def get_summary():
 
 @app.route('/api/status', methods=['GET'])
 def status():
-    return jsonify({"status": "running", "server_time": time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())})
+    """Health check endpoint showing server timestamp and algorithm data freshness."""
+    congestion_path = resolve_path('../algorithm/congestion_results.csv')
+    data_freshness = "Data file missing"
+    if os.path.exists(congestion_path):
+        data_timestamp = os.path.getmtime(congestion_path)
+        data_freshness = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(data_timestamp))
+        
+    return jsonify({
+        "status": "running",
+        "server_time": time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
+        "data_last_updated": data_freshness
+    })
 
 @app.route('/api/refresh', methods=['POST'])
 def refresh_data():
+    """Re-runs the algorithm pipeline via subprocess and returns before/after diff."""
+    congestion_path = resolve_path('../algorithm/congestion_results.csv')
+    
+    before_data = {}
+    if os.path.exists(congestion_path):
+        try:
+            df_before = pd.read_csv(congestion_path, index_col=0)
+            before_data = df_before.to_dict(orient='index')
+        except Exception:
+            pass
+
     alg_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'algorithm'))
     for script in ["sensor_fusion.py", "fkm_clustering.py", "fahp.py"]:
-        try: subprocess.run(["python", script], cwd=alg_dir, capture_output=True, text=True, check=True)
-        except Exception as e: logger.error(f"Script {script} error: {e}")
-    return jsonify({"status": "success", "new_data": load_csv_data('../algorithm/congestion_results.csv')})
+        try:
+            subprocess.run(["python", script], cwd=alg_dir, capture_output=True, text=True, check=True)
+        except Exception as e:
+            logger.error(f"Script {script} error: {e}")
+            
+    after_data = load_csv_data('../algorithm/congestion_results.csv')
+    
+    diff = {}
+    for route_id, after_info in after_data.items():
+        before_info = before_data.get(route_id, {})
+        diff[route_id] = {
+            "before_score": before_info.get("congestion_score", None),
+            "after_score": after_info.get("congestion_score"),
+            "before_status": before_info.get("status", "UNKNOWN"),
+            "after_status": after_info.get("status")
+        }
+
+    return jsonify({
+        "status": "success",
+        "message": "Algorithm pipeline completed successfully.",
+        "diff": diff,
+        "new_data": after_data
+    })
 
 if __name__ == '__main__':
     logger.info("Starting Multi-Modal Traffic AI Backend API...")
