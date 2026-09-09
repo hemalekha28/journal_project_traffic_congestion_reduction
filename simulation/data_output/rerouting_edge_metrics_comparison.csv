@@ -1,0 +1,5 @@
+Metric,Pre-Rerouting (Baseline),Post-Rerouting,Percentage Change (%)
+Average Speed (km/h),59.92,59.56,-0.6
+Total Travel Time (veh-s),1729.0,1702.0,-1.56
+Total CO2 Emission (g),11387.82,11365.22,-0.2
+Total Fuel Consumption (L),3691.72,3684.4,-0.2

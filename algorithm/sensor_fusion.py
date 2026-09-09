@@ -24,7 +24,9 @@ def grubbs_test(data, alpha=0.05):
     return data[g_scores <= g_critical]
 
 
-def sensor_fusion(df):
+def sensor_fusion(df, random_seed=None):
+    if random_seed is not None:
+        np.random.seed(random_seed)
     """
     Fuse multiple sensor readings into a single value.
     Simulates 4 sensors per vehicle by adding small noise
