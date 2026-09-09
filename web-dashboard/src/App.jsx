@@ -1,56 +1,3 @@
-<<<<<<< HEAD
-import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Polyline, Popup } from 'react-leaflet';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
-import axios from 'axios';
-import 'leaflet/dist/leaflet.css';
-import './App.css';
-
-// Kalinga Hospital Junction
-const CENTER = [20.3147, 85.8203];
-
-// Pre-defined path geometries for the demo
-const GEOMETRIES = [
-  { name: 'Via Jaydev Vihar', positions: [[20.3147, 85.8203], [20.3200, 85.8150]] },
-  { name: 'Via Damana', positions: [[20.3147, 85.8203], [20.3100, 85.8250]] },
-  { name: 'Via Acharya Vihar', positions: [[20.3147, 85.8203], [20.3050, 85.8150]] },
-  { name: 'Main Road', positions: [[20.3147, 85.8203], [20.3200, 85.8250]] }
-];
-
-const COLOR_MAP = { 
-  HIGH: 'var(--color-high)', 
-  MEDIUM: 'var(--color-medium)', 
-  LOW: 'var(--color-low)' 
-};
-
-export default function App() {
-  const [congestion, setCongestion] = useState({});
-  const [history, setHistory] = useState({});
-  const [status, setStatus] = useState(null);
-  const [rerouteState, setRerouteState] = useState({}); // { [route_id]: { loading: bool, data: obj, open: bool } }
-  
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(null);
-
-  // NOTE: Data fetching logic kept exactly as requested
-  const fetchData = async () => {
-    try {
-      setError(null);
-      
-      const [congRes, histRes, statRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/congestion'),
-        axios.get('http://localhost:5000/api/history'),
-        axios.get('http://localhost:5000/api/status')
-      ]);
-
-      setCongestion(congRes.data.data);
-      setHistory(histRes.data.data);
-      setStatus(statRes.data);
-    } catch (err) {
-      console.error(err);
-      setError('Backend offline or unreachable.');
-=======
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Polyline, Popup, Marker, CircleMarker } from 'react-leaflet';
 import {
@@ -62,6 +9,7 @@ import axios from 'axios';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './App.css';
+import { findNearestLandmark } from './landmarks.js';
 
 // Fix Leaflet's default icon path issues
 delete L.Icon.Default.prototype._getIconUrl;
@@ -71,7 +19,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-// ─── Constants ────────────────────────────────────────────────
+// Constants
 const API = 'http://localhost:5000';
 const CENTER = [20.3147, 85.8203];
 
@@ -97,15 +45,89 @@ const ROUTE_GEOMETRIES = {
 
 const STATUS_COLOR = { HIGH: '#ff4757', MEDIUM: '#ffa502', LOW: '#2ed573' };
 const RADAR_COLORS = ['#ff4757', '#ffa502', '#2ed573', '#60a5fa'];
+// duplicate RADAR_COLORS removed
 
+// Helper to derive display name for a route geometry
+const getDisplayName = (geom) => {
+  if (geom.name) return geom.name;
+  const pos = geom.positions;
+  if (!Array.isArray(pos) || pos.length === 0) return 'Unknown Corridor';
+  const origin = pos[0];
+  const dest = pos[pos.length - 1];
+  const originName = findNearestLandmark(origin);
+  const destName = findNearestLandmark(dest);
+  return `${originName} → ${destName}`;
+};
+
+// Driver View plain-language translation helpers
+const getDriverStatusText = (status) => {
+  switch (status) {
+    case 'HIGH':
+      return { label: 'Heavy Congestion', icon: '🔴', desc: 'Expect delays on this stretch. High traffic volume detected.', color: '#ef4444' };
+    case 'MEDIUM':
+      return { label: 'Moderate Traffic', icon: '🟡', desc: 'Traffic is moving at moderate speeds. Minor slowdowns possible.', color: '#f59e0b' };
+    case 'LOW':
+    default:
+      return { label: 'Clear Traffic', icon: '🟢', desc: 'Road is clear. Normal driving conditions.', color: '#10b981' };
+  }
+};
+
+const getDriverRerouteMessage = (routeId, data, status, hist, summary) => {
+  const is257 = routeId === '!257' || routeId === 'route257';
+  if (is257 || data?.reroute_available) {
+    const travelTimeSavings = data?.alternate_route_savings || '3.3%';
+    const altRouteName = data?.alternate_route ? data.alternate_route.replace('route', 'Route ').toUpperCase() : 'Route !288';
+    return {
+      available: true,
+      tier: 'suggestion',
+      title: 'Simulated Reroute Result',
+      altRoute: altRouteName,
+      savings: travelTimeSavings,
+      delayEstimate: '~90 seconds saved on this stretch',
+      sentence: `An alternate route (${altRouteName}) is available and could save you approximately ${travelTimeSavings} travel time (~90 seconds saved) by bypassing bottleneck areas.`
+    };
+  }
+  // No reroute data — message depends on actual congestion tier
+  if (status === 'HIGH' || status === 'MEDIUM') {
+    let insightStr = 'Traffic volume is higher than average on this stretch. Expect some delays.';
+    let icon = '📊';
+
+    if (hist && summary) {
+        if (hist.speed && summary.avg_speed && hist.speed < summary.avg_speed * 0.95) {
+            insightStr = `This corridor shows notably low average speed (${hist.speed.toFixed(1)} m/s vs network average of ${summary.avg_speed.toFixed(1)} m/s) — likely due to heavy traffic volume. Consider checking for alternate routes during peak hours.`;
+            icon = '🐢';
+        } else if (hist.co2_emission && summary.avg_co2 && hist.co2_emission > summary.avg_co2 * 1.05) {
+            insightStr = `Emissions data indicates dense, stop-and-go traffic (CO₂ levels at ${hist.co2_emission.toFixed(0)} mg, above the ${summary.avg_co2.toFixed(0)} mg average). Expect congestion.`;
+            icon = '☁️';
+        } else if (hist.fuel_consumption && hist.fuel_consumption > 10) {
+            insightStr = `High fuel consumption patterns detected on this route, indicating heavy stop-and-go traffic conditions.`;
+            icon = '⛽';
+        }
+    }
+
+    return {
+      available: false,
+      tier: 'insight',
+      icon: icon,
+      title: 'General Traffic Insight',
+      sentence: insightStr
+    };
+  }
+  // LOW congestion — genuinely fine
+  return {
+    available: false,
+    tier: 'clear',
+    title: 'Traffic Flowing Normally',
+    sentence: 'Traffic is flowing normally on this corridor. No alternate route is needed right now.'
+  };
+};
 const NAV_ITEMS = [
-  { id: 'dashboard',  label: 'Dashboard',  icon: '⬛' },
-  { id: 'analytics',  label: 'Analytics',  icon: '◈'  },
-  { id: 'emissions',  label: 'Emissions',  icon: '🌿' },
+  { id: 'dashboard',  label: 'Dashboard',  icon: '🏠' },
+  { id: 'analytics',  label: 'Analytics',  icon: '📈'  },
+  { id: 'emissions',  label: 'Emissions',  icon: '⚡' },
   { id: 'rankings',   label: 'Rankings',   icon: '🏆' },
 ];
 
-// ─── Score Ring ───────────────────────────────────────────────
 function ScoreRing({ score, maxScore, color }) {
   const pct = Math.min(score / (maxScore || 1), 1);
   const r = 28;
@@ -128,7 +150,6 @@ function ScoreRing({ score, maxScore, color }) {
   );
 }
 
-// ─── KPI Card ─────────────────────────────────────────────────
 function KPICard({ title, value, subtitle, color, pulse }) {
   return (
     <div className="kpi-card" style={{ '--kpi-color': color }}>
@@ -140,7 +161,6 @@ function KPICard({ title, value, subtitle, color, pulse }) {
   );
 }
 
-// ─── Alert Banner ─────────────────────────────────────────────
 function AlertBanner({ routes, onDismiss }) {
   const highRoutes = Object.entries(routes).filter(([, v]) => v.status === 'HIGH');
   if (!highRoutes.length) return null;
@@ -148,19 +168,19 @@ function AlertBanner({ routes, onDismiss }) {
     <div className="alert-banner" role="alert">
       <span className="alert-dot" />
       <span>
-        <strong>⚠ HIGH CONGESTION ALERT</strong> — {highRoutes.map(([id]) => id.toUpperCase()).join(', ')} detected
+        <strong>HIGH CONGESTION ALERT</strong> – {highRoutes.map(([id]) => id.toUpperCase()).join(', ')} detected
         with critical congestion levels. Immediate rerouting recommended.
       </span>
-      <button className="alert-close" onClick={onDismiss} aria-label="Dismiss alert">✕</button>
+      <button className="alert-close" onClick={onDismiss} aria-label="Dismiss alert">✖</button>
     </div>
   );
 }
 
-// ─── Route Detail Modal ───────────────────────────────────────
 function RouteModal({ routeId, congestion, history, onClose }) {
   const data = congestion[routeId];
   const hist = history[routeId] || {};
-  const geom = ROUTE_GEOMETRIES[routeId] || {};
+  // Use backend-provided geometry for naming
+  const geom = { positions: congestion[routeId]?.geometry || [], name: '' };
   const color = STATUS_COLOR[data?.status] || '#888';
   if (!data) return null;
 
@@ -168,15 +188,15 @@ function RouteModal({ routeId, congestion, history, onClose }) {
   const maxScore = Math.max(...Object.values(congestion).map(d => d.congestion_score), 1);
 
   const stats = [
-    { label: 'Speed',          value: hist.speed            ? `${hist.speed.toFixed(2)} m/s`           : 'N/A', icon: '⚡' },
-    { label: 'CO₂ Emission',   value: hist.co2_emission     ? `${hist.co2_emission.toFixed(1)} mg`      : 'N/A', icon: '💨' },
-    { label: 'CO Emission',    value: hist.co_emission      ? `${hist.co_emission.toFixed(2)} mg`       : 'N/A', icon: '🌫' },
-    { label: 'NOx Emission',   value: hist.nox_emission     ? `${hist.nox_emission.toFixed(3)} mg`      : 'N/A', icon: '⚗' },
+    { label: 'Speed',          value: hist.speed            ? `${hist.speed.toFixed(2)} m/s`           : 'N/A', icon: '🚀' },
+    { label: 'CO₂ Emission',   value: hist.co2_emission     ? `${hist.co2_emission.toFixed(1)} mg`      : 'N/A', icon: '🌿' },
+    { label: 'CO Emission',    value: hist.co_emission      ? `${hist.co_emission.toFixed(2)} mg`       : 'N/A', icon: '🛢️' },
+    { label: 'NOx Emission',   value: hist.nox_emission     ? `${hist.nox_emission.toFixed(3)} mg`      : 'N/A', icon: '⚗️' },
     { label: 'Fuel Consumption', value: hist.fuel_consumption ? `${hist.fuel_consumption.toFixed(3)} ml/s` : 'N/A', icon: '⛽' },
     { label: 'FAHP Score',     value: data.congestion_score?.toFixed(2),                                         icon: '📊' },
-    { label: 'Hybrid Score',   value: data.hybrid_score?.toFixed(2) || 'N/A',                                    icon: '🧠' },
-    { label: 'Algorithm Rank', value: `#${data.rank} of ${totalRoutes}`,                                         icon: '🏆' },
-    { label: 'Status',         value: `${data.status} CONGESTION`,                                               icon: '🚦' },
+    { label: 'Hybrid Score',   value: data.hybrid_score?.toFixed(2) || 'N/A',                                    icon: '🧩' },
+    { label: 'Algorithm Rank', value: `#${data.rank} of ${totalRoutes}`,                                         icon: '🏅' },
+    { label: 'Status',         value: `${data.status} CONGESTION`,                                               icon: '⚠️' },
   ];
 
   return (
@@ -187,19 +207,19 @@ function RouteModal({ routeId, congestion, history, onClose }) {
             <div className="modal-route-id" style={{ color }}>
               {routeId.replace('route', 'ROUTE ').toUpperCase()}
             </div>
-            <div className="modal-route-name">{geom.name || 'Unknown Corridor'}</div>
+            <div className="modal-route-name">{getDisplayName(geom)}</div>
           </div>
           <span className="modal-badge" style={{ background: color + '18', color, border: `1px solid ${color}35` }}>
             {data.status} CONGESTION
           </span>
-          <button className="modal-close" onClick={onClose} aria-label="Close modal">✕</button>
+          <button className="modal-close" onClick={onClose} aria-label="Close modal">✖</button>
         </div>
 
         <div className="modal-body">
           {data.alternate_route && (
             <div style={{ background: 'rgba(46, 213, 115, 0.1)', border: '1px solid rgba(46, 213, 115, 0.3)', borderRadius: 12, padding: '12px 16px', marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#2ed573', fontWeight: 700, fontSize: 12, textTransform: 'uppercase', marginBottom: 4 }}>
-                <span>✨ Intelligent Rerouting</span>
+                <span>🤖 Intelligent Rerouting</span>
               </div>
               <div style={{ fontSize: 13, color: '#f1f5f9' }}>
                 Suggested Alternate: <strong>{data.alternate_route.replace('route', 'Route ').toUpperCase()}</strong>
@@ -235,7 +255,6 @@ function RouteModal({ routeId, congestion, history, onClose }) {
   );
 }
 
-// ─── Custom Recharts Tooltip ───────────────────────────────────
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
@@ -250,7 +269,6 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
-// ─── Main App ─────────────────────────────────────────────────
 export default function App() {
   const [activeTab, setActiveTab]         = useState('dashboard');
   const [congestion, setCongestion]       = useState({});
@@ -267,9 +285,11 @@ export default function App() {
   const [clock, setClock]                 = useState(new Date());
   const [sortKey, setSortKey]             = useState('rank');
   const [sortDir, setSortDir]             = useState('asc');
+  const [viewMode, setViewMode]           = useState('authority'); // 'authority' | 'driver'
+  const [driverRouteId, setDriverRouteId] = useState('!257');
   const countdownRef = useRef(null);
 
-  // ── Fetch all data ─────────────────────────────────────────
+  // Fetch all data
   const fetchData = useCallback(async () => {
     try {
       setError(null);
@@ -285,71 +305,21 @@ export default function App() {
       setSummary(sumRes.data.data || null);
     } catch {
       setError('Backend offline or unreachable. Make sure the Flask server is running on port 5000.');
->>>>>>> origin/feature/dashboard-api-fixes
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-<<<<<<< HEAD
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const handleToggleReroute = async (routeId) => {
-    const cleanId = routeId.startsWith('!') ? routeId : `!${routeId}`;
-    const current = rerouteState[cleanId] || {};
-
-    if (current.open) {
-      setRerouteState(prev => ({ ...prev, [cleanId]: { ...current, open: false } }));
-      return;
-    }
-
-    if (current.data) {
-      setRerouteState(prev => ({ ...prev, [cleanId]: { ...current, open: true } }));
-      return;
-    }
-
-    setRerouteState(prev => ({ ...prev, [cleanId]: { loading: true, open: true } }));
-    try {
-      const res = await axios.get(`http://localhost:5000/routes/${cleanId}/reroute-suggestion`);
-      setRerouteState(prev => ({
-        ...prev,
-        [cleanId]: { loading: false, open: true, data: res.data }
-      }));
-    } catch (err) {
-      setRerouteState(prev => ({
-        ...prev,
-        [cleanId]: {
-          loading: false,
-          open: true,
-          data: { available: false, message: 'Failed to connect to rerouting service.' }
-        }
-      }));
-    }
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await axios.post('http://localhost:5000/api/refresh');
-      await fetchData();
-    } catch (err) {
-      console.error(err);
-      setError('Pipeline refresh failed.');
-=======
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // ── Live clock ─────────────────────────────────────────────
+  // Live clock
   useEffect(() => {
     const t = setInterval(() => setClock(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // ── Auto-refresh countdown ─────────────────────────────────
+  // Auto-refresh countdown
   useEffect(() => {
     if (!autoRefresh) {
       clearInterval(countdownRef.current);
@@ -366,7 +336,7 @@ export default function App() {
     return () => clearInterval(countdownRef.current);
   }, [autoRefresh, fetchData]);
 
-  // ── Pipeline refresh ───────────────────────────────────────
+  // Pipeline refresh
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
@@ -374,226 +344,26 @@ export default function App() {
       await fetchData();
     } catch {
       setError('Pipeline refresh failed. Check backend logs.');
->>>>>>> origin/feature/dashboard-api-fixes
       setRefreshing(false);
     }
   };
 
-<<<<<<< HEAD
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: 'var(--text-secondary)' }}>
-        Loading Traffic Analysis...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <h2 style={{ color: 'var(--color-high)', marginBottom: '1rem' }}>⚠️ Connection Error</h2>
-        <p>{error}</p>
-        <button className="btn" onClick={() => { setLoading(true); fetchData(); }} style={{ marginTop: '1rem' }}>
-          Retry Connection
-        </button>
-      </div>
-    );
-  }
-
-  // Derive top 10 for alerts
-  const allRoutes = Object.entries(congestion);
-  const top10 = [...allRoutes]
-    .sort((a, b) => b[1].congestion_score - a[1].congestion_score)
-    .slice(0, 10);
-
-  // Derive stats
-  const totalRoutes = allRoutes.length;
-  const highCount = allRoutes.filter(([_, d]) => d.status === 'HIGH').length;
-  const medCount = allRoutes.filter(([_, d]) => d.status === 'MEDIUM').length;
-  const lowCount = allRoutes.filter(([_, d]) => d.status === 'LOW').length;
-
-  // Prepare Chart Data for Top 10 Congestion Scores
-  const chartData = top10.map(([id, data]) => ({
-    name: `Route !${id.replace('!', '')}`,
-    score: Math.round(data.congestion_score),
-    status: data.status
-  }));
-
-  // Prepare authentic Rank Comparison Chart Data (direct from CSV API)
-  const rankComparisonData = top10.map(([id, data]) => ({
-    name: `!${id.replace('!', '')}`,
-    fahp_rank: data.rank || 0,
-    entropy_rank: data.entropy_rank || data.rank || 0
-  }));
-
-  return (
-    <div className="app-layout">
-      {/* 1. Header Bar */}
-      <header className="app-header">
-        <div className="header-left">
-          <div className="logo-placeholder">T</div>
-          <div className="project-title">Traffic Analysis Platform</div>
-        </div>
-        <div className="header-right">
-          {status && (
-            <span className="timestamp">
-              Last updated: {status.last_updated}
-            </span>
-          )}
-          <button 
-            className="btn btn-secondary" 
-            onClick={handleRefresh} 
-            disabled={refreshing}
-          >
-            {refreshing ? '🔄 Refreshing...' : '▶ Re-run Simulation'}
-          </button>
-        </div>
-      </header>
-
-      <main className="main-content">
-        
-        {/* 2. Summary Stats Bar */}
-        <div className="stats-bar">
-          <div className="stat-card">
-            <span className="stat-title">Total Routes Monitored</span>
-            <span className="stat-value">{totalRoutes}</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-title">High Congestion</span>
-            <span className="stat-value high">{highCount}</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-title">Medium Congestion</span>
-            <span className="stat-value medium">{medCount}</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-title">Low Congestion</span>
-            <span className="stat-value low">{lowCount}</span>
-          </div>
-        </div>
-
-        {/* 3. Middle Row: Map & Alerts */}
-        <div className="middle-row">
-          
-          <div className="panel">
-            <div className="panel-header">Live Traffic Map</div>
-            <div className="map-wrapper">
-              <MapContainer center={CENTER} zoom={15} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-                <TileLayer 
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" 
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' 
-                />
-                
-                {top10.map(([id, data], idx) => {
-                  const geom = GEOMETRIES[idx % GEOMETRIES.length];
-                  const hist = history[id] || {};
-                  const cColor = COLOR_MAP[data.status] || '#888';
-                  
-                  return (
-                    <Polyline 
-                      key={id} 
-                      positions={geom.positions} 
-                      color={cColor} 
-                      weight={8} 
-                      opacity={0.9}
-                    >
-                      <Popup>
-                        <div style={{ fontFamily: 'var(--font-sans)', color: 'var(--text-primary)' }}>
-                          <strong style={{fontSize: '14px', color: cColor}}>Route {id.replace('!', '')}</strong>
-                          <br/>
-                          <span style={{color: 'var(--text-secondary)'}}>{geom.name}</span>
-                          
-                          <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', fontSize: '12px' }}>
-                            <div><strong>Speed:</strong> {hist.speed ? hist.speed.toFixed(2) + ' m/s' : 'N/A'}</div>
-                            <div><strong>CO2:</strong> {hist.co2_emission ? hist.co2_emission.toFixed(1) : 'N/A'}</div>
-                            <div><strong>CO:</strong> {hist.co_emission ? hist.co_emission.toFixed(2) : 'N/A'}</div>
-                            <div><strong>NOx:</strong> {hist.nox_emission ? hist.nox_emission.toFixed(2) : 'N/A'}</div>
-                          </div>
-                        </div>
-                      </Popup>
-                    </Polyline>
-                  );
-                })}
-              </MapContainer>
-              
-              <div className="map-legend">
-                <div className="legend-item">
-                  <div className="legend-color" style={{background: 'var(--color-high)'}}></div>
-                  High Congestion
-                </div>
-                <div className="legend-item">
-                  <div className="legend-color" style={{background: 'var(--color-medium)'}}></div>
-                  Medium Congestion
-                </div>
-                <div className="legend-item">
-                  <div className="legend-color" style={{background: 'var(--color-low)'}}></div>
-                  Low Congestion
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="panel">
-            <div className="panel-header">Top 10 Congestion Alerts</div>
-            <div className="panel-content">
-              <div className="alerts-list">
-                {top10.map(([id, data]) => {
-                  const cColor = COLOR_MAP[data.status] || '#888';
-                  const cleanId = id.startsWith('!') ? id : `!${id}`;
-                  const rState = rerouteState[cleanId] || {};
-                  
-                  return (
-                    <div key={id} className="alert-item">
-                      <div className="alert-header">
-                        <span className="route-id" style={{ color: cColor }}>Route {id.replace('!', '')}</span>
-                        <span className={`tier-badge ${data.status.toLowerCase()}`}>{data.status}</span>
-                      </div>
-                      <div className="alert-stats">
-                        <span><strong>Score:</strong> {data.congestion_score.toFixed(1)}</span>
-                        <span><strong>Rank:</strong> #{data.rank}</span>
-                      </div>
-                      
-                      <button 
-                        className="btn btn-secondary" 
-                        onClick={() => handleToggleReroute(id)}
-                        style={{ marginTop: '0.5rem', width: '100%' }}
-                      >
-                        {rState.open ? 'Hide Reroute Suggestion' : 'View Reroute Suggestion'}
-                      </button>
-                      
-                      {rState.open && (
-                        <div className="reroute-card" style={{ marginTop: '0.5rem', padding: '0.75rem', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
-                          {rState.loading ? (
-                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Loading reroute analysis...</p>
-                          ) : rState.data?.available ? (
-                            <div>
-                              <p style={{ fontSize: '13px', marginBottom: '0.5rem' }}>
-                                <strong>Suggested Action ({rState.data.recommended_variant}):</strong> Reroute 50% of heavy-overlap fleet via secondary arterial.
-                              </p>
-                              <div className="reroute-metrics" style={{ display: 'flex', gap: '0.5rem' }}>
-                                <div className="metric-pill" style={{ background: 'rgba(34,197,94,0.1)', color: '#16a34a', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>
-                                  Travel Time: -{rState.data.travel_time_improvement_pct}%
-                                </div>
-                                <div className="metric-pill" style={{ background: 'rgba(34,197,94,0.1)', color: '#16a34a', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>
-                                  CO₂ / Fuel: -{rState.data.co2_fuel_improvement_pct}%
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>
-                              {rState.data?.message || "Rerouting simulation data currently available only for bottleneck Route !257."}
-                            </p>
-                          )}
-                        </div>
-                      )}
-=======
-  // ── Sort handler ───────────────────────────────────────────
+  // Sort handler
   const handleSort = (key) => {
     setSortDir(prev => sortKey === key ? (prev === 'asc' ? 'desc' : 'asc') : 'asc');
     setSortKey(key);
   };
 
-  // ── Loading / Error screens ────────────────────────────────
+  // Featured route handling (new)
+  const featuredRouteId = 'route257';
+  const isFeatured = (id) => id === featuredRouteId;
+
+  // Accordion state for reroute toggle (new)
+  const [expandedRows, setExpandedRows] = useState({});
+  const handleToggleReroute = (id) => {
+    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
   if (loading) return (
     <div className="state-screen">
       <div className="loader-ring" />
@@ -603,28 +373,23 @@ export default function App() {
 
   if (error) return (
     <div className="state-screen">
-      <div className="error-icon">⚠</div>
+      <div className="error-icon">⚠️</div>
       <h2 className="error-title">Connection Failed</h2>
       <p className="state-msg" style={{ marginBottom: 20, maxWidth: 400 }}>{error}</p>
-      <button className="btn-primary" onClick={() => { setLoading(true); fetchData(); }}>
-        Retry Connection
-      </button>
+      <button className="btn-primary" onClick={() => { setLoading(true); fetchData(); }}>Retry Connection</button>
     </div>
   );
 
-  // ── Derived data ───────────────────────────────────────────
   const routeEntries = Object.entries(congestion)
     .sort((a, b) => b[1].congestion_score - a[1].congestion_score);
   const maxScore = Math.max(...routeEntries.map(([, d]) => d.congestion_score), 1);
 
-  // Bar chart
   const barData = routeEntries.map(([id, d]) => ({
     name: id.replace('route', 'Route '),
     score: Math.round(d.congestion_score),
     status: d.status,
   }));
 
-  // Radar chart data — normalize each param to 0–100
   const radarParams = ['speed', 'co_emission', 'co2_emission', 'nox_emission', 'fuel_consumption'];
   const paramMaxes = {};
   radarParams.forEach(p => {
@@ -644,14 +409,12 @@ export default function App() {
     return entry;
   });
 
-  // Emissions grouped bar
   const emissionsData = Object.entries(history).map(([id, d]) => ({
     name: id.replace('route', 'Route '),
     CO:   parseFloat((d.co_emission   || 0).toFixed(2)),
     NOx:  parseFloat((d.nox_emission  || 0).toFixed(3)),
   }));
 
-  // Sorted routes for rankings tab
   const sortedRoutes = [...routeEntries].sort((a, b) => {
     let va = a[1][sortKey] ?? (sortKey === 'id' ? a[0] : 0);
     let vb = b[1][sortKey] ?? (sortKey === 'id' ? b[0] : 0);
@@ -659,11 +422,16 @@ export default function App() {
     return sortDir === 'asc' ? va - vb : vb - va;
   });
 
+  // Bring featured route to top in rankings
+  const featuredInRankings = sortedRoutes.find(([id]) => isFeatured(id));
+  const rankingsWithoutFeatured = sortedRoutes.filter(([id]) => !isFeatured(id));
+  const finalRankings = featuredInRankings ? [featuredInRankings, ...rankingsWithoutFeatured] : sortedRoutes;
+
   const currentTab = NAV_ITEMS.find(n => n.id === activeTab);
 
   return (
     <div className="app-shell">
-      {/* ── Sidebar ── */}
+      {/* Sidebar */}
       <aside className="sidebar" aria-label="Navigation sidebar">
         <div className="sidebar-brand">
           <div className="brand-icon">🚦</div>
@@ -686,56 +454,186 @@ export default function App() {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="sidebar-clock">
-            {clock.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-          </div>
-          <div className="sidebar-date">
-            {clock.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
-          </div>
+          <div className="sidebar-clock">{clock.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+          <div className="sidebar-date">{clock.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
         </div>
       </aside>
 
-      {/* ── Main Content ── */}
+      {/* Main Content */}
       <main className="main-content" role="main">
         {/* Topbar */}
         <header className="topbar">
           <div>
-            <h1 className="topbar-title">{currentTab?.label ?? 'Dashboard'}</h1>
-            <p className="topbar-sub">Kalinga Hospital Junction · Bhubaneswar, Odisha</p>
+            <h1 className="topbar-title">
+              {viewMode === 'driver' ? 'Driver View' : (currentTab?.label ?? 'Dashboard')}
+            </h1>
+            <p className="topbar-sub">Kalinga Hospital Junction – Bhubaneswar, Odisha</p>
           </div>
           <div className="topbar-actions">
-            {status && (
+            {/* Authority / Driver Toggle */}
+            <div className="view-toggle" role="group" aria-label="Switch view mode">
+              <button
+                id="btn-authority-view"
+                className={`view-toggle-btn ${viewMode === 'authority' ? 'active' : ''}`}
+                onClick={() => setViewMode('authority')}
+                aria-pressed={viewMode === 'authority'}
+              >
+                🏛️ Authority View
+              </button>
+              <button
+                id="btn-driver-view"
+                className={`view-toggle-btn ${viewMode === 'driver' ? 'active' : ''}`}
+                onClick={() => setViewMode('driver')}
+                aria-pressed={viewMode === 'driver'}
+              >
+                🚗 Driver View
+              </button>
+            </div>
+            {viewMode === 'authority' && status && (
               <span className="status-badge">
                 <span className="status-dot" />
                 Updated: {status.data_last_updated}
               </span>
             )}
-            <button
-              className="refresh-btn"
-              onClick={() => setAutoRefresh(p => !p)}
-              title={autoRefresh ? 'Disable auto-refresh' : 'Enable auto-refresh (every 30s)'}
-              aria-pressed={autoRefresh}
-            >
-              ⟳ {autoRefresh ? `Auto ${countdown}s` : 'Auto'}
-            </button>
-            <button
-              className={`refresh-btn ${refreshing ? 'spinning' : ''}`}
-              onClick={handleRefresh}
-              disabled={refreshing}
-              aria-label="Re-run algorithm pipeline"
-            >
-              <span className="btn-icon">⟳</span> {refreshing ? 'Running...' : 'Re-run Algorithm'}
-            </button>
+            {viewMode === 'authority' && (
+              <>
+                <button
+                  className="refresh-btn"
+                  onClick={() => setAutoRefresh(p => !p)}
+                  title={autoRefresh ? 'Disable auto-refresh' : 'Enable auto-refresh (every 30s)'}
+                  aria-pressed={autoRefresh}
+                >
+                  🔄 {autoRefresh ? `Auto ${countdown}s` : 'Auto'}
+                </button>
+                <button
+                  className={`refresh-btn ${refreshing ? 'spinning' : ''}`}
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  aria-label="Re-run algorithm pipeline"
+                >
+                  <span className="btn-icon">⚙️</span> {refreshing ? 'Running...' : 'Re-run Algorithm'}
+                </button>
+              </>
+            )}
           </div>
         </header>
 
         <div className="dashboard-wrap">
+          {/* =========================================
+               DRIVER VIEW
+          ========================================= */}
+          {viewMode === 'driver' && (
+            <div className="driver-view">
+              <div className="driver-hero">
+                <div className="driver-hero-text">
+                  <h2>Route Status at a Glance</h2>
+                  <p>Select a road corridor to see current congestion and reroute advice in plain language.</p>
+                </div>
+                <div className="driver-selector-wrap">
+                  <label htmlFor="driver-route-select" className="driver-select-label">Choose your route:</label>
+                  <select
+                    id="driver-route-select"
+                    className="driver-select"
+                    value={driverRouteId}
+                    onChange={e => setDriverRouteId(e.target.value)}
+                  >
+                    {routeEntries.map(([id, data]) => (
+                      <option key={id} value={id}>
+                        {id.replace('route', 'Route ').toUpperCase()} — {data.status} CONGESTION (Score: {data.congestion_score.toFixed(1)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Selected Route Card */}
+              {(() => {
+                const selData = congestion[driverRouteId];
+                if (!selData) return (
+                  <div className="driver-no-data">No data available for this route.</div>
+                );
+                const statusInfo = getDriverStatusText(selData.status);
+                const rerouteInfo = getDriverRerouteMessage(driverRouteId, selData, selData.status, history[driverRouteId], summary);
+                return (
+                  <div className="driver-cards-area">
+                    {/* Status Card */}
+                    <div className="driver-status-card" style={{ '--driver-color': statusInfo.color }}>
+                      <div className="dsc-icon">{statusInfo.icon}</div>
+                      <div className="dsc-body">
+                        <div className="dsc-label" style={{ color: statusInfo.color }}>{statusInfo.label}</div>
+                        <div className="dsc-route">{driverRouteId.replace('route', 'Route ').toUpperCase()}</div>
+                        <p className="dsc-desc">{statusInfo.desc}</p>
+                      </div>
+                      <div className="dsc-badge" style={{ background: statusInfo.color + '22', color: statusInfo.color, border: `1px solid ${statusInfo.color}44` }}>
+                        {selData.status}
+                      </div>
+                    </div>
+
+                    {/* Reroute Card */}
+                    <div className={`driver-reroute-card ${rerouteInfo.tier === 'suggestion' ? 'reroute-active' : rerouteInfo.tier === 'insight' ? 'reroute-insight' : rerouteInfo.tier === 'unavailable' ? 'reroute-unavailable' : 'reroute-none'}`}>
+                      <div className="drc-header">
+                        <span className="drc-icon">{rerouteInfo.tier === 'suggestion' ? '🔀' : rerouteInfo.tier === 'insight' ? (rerouteInfo.icon || '💡') : rerouteInfo.tier === 'unavailable' ? 'ℹ️' : '✅'}</span>
+                        <span className="drc-title">{rerouteInfo.title}</span>
+                      </div>
+                      <p className="drc-sentence">{rerouteInfo.sentence}</p>
+                      {rerouteInfo.available && (
+                        <div className="drc-details">
+                          <div className="drc-stat">
+                            <span>Suggested Route</span>
+                            <strong>{rerouteInfo.altRoute}</strong>
+                          </div>
+                          <div className="drc-stat">
+                            <span>Estimated Time Saved</span>
+                            <strong>{rerouteInfo.delayEstimate}</strong>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* All Routes Quick Overview */}
+              <div className="driver-overview-section">
+                <div className="driver-section-title">📍 All Monitored Corridors</div>
+                <div className="driver-overview-grid">
+                  {routeEntries.map(([id, data]) => {
+                    const si = getDriverStatusText(data.status);
+                    const isSelected = id === driverRouteId;
+                    return (
+                      <button
+                        key={id}
+                        id={`driver-route-card-${id}`}
+                        className={`driver-mini-card ${isSelected ? 'selected' : ''}`}
+                        style={{ '--mini-color': si.color }}
+                        onClick={() => setDriverRouteId(id)}
+                        aria-pressed={isSelected}
+                      >
+                        <span className="dmc-icon">{si.icon}</span>
+                        <div className="dmc-info">
+                          <div className="dmc-route">{id.replace('route', 'Route ').toUpperCase()}</div>
+                          <div className="dmc-status" style={{ color: si.color }}>{si.label}</div>
+                        </div>
+                        {isSelected && <span className="dmc-selected-dot" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================
+               AUTHORITY VIEW
+          ========================================= */}
+          {viewMode === 'authority' && (
+            <>
           {/* Alert Banner */}
           {!alertDismissed && (
             <AlertBanner routes={congestion} onDismiss={() => setAlertDismissed(true)} />
           )}
 
-          {/* KPI Row — always visible */}
+          {/* KPI Row */}
           <div className="kpi-row" aria-label="Key performance indicators">
             <KPICard
               title="Total Routes"
@@ -766,14 +664,14 @@ export default function App() {
             />
           </div>
 
-          {/* ── DASHBOARD TAB ── */}
+          {/* Dashboard Tab */}
           {activeTab === 'dashboard' && (
             <div className="tab-content">
               {/* Route Cards */}
               <div className="route-list-grid" aria-label="Route congestion cards">
                 {routeEntries.map(([id, data]) => {
                   const color = STATUS_COLOR[data.status] || '#888';
-                  const geom = ROUTE_GEOMETRIES[id] || {};
+                  const geom = { positions: congestion[id]?.geometry || [], name: '' };
                   return (
                     <div
                       key={id}
@@ -782,7 +680,7 @@ export default function App() {
                       onClick={() => setSelectedRoute(id)}
                       role="button"
                       tabIndex={0}
-                      aria-label={`${id} — ${data.status} congestion. Click for details.`}
+                      aria-label={`${id} – ${data.status} congestion. Click for details.`}
                       onKeyDown={e => e.key === 'Enter' && setSelectedRoute(id)}
                     >
                       <div className="card-top">
@@ -790,7 +688,7 @@ export default function App() {
                           <div className="card-id">
                             {id.replace('route', 'Route ').toUpperCase()}
                           </div>
-                          <div className="card-name">{geom.name || 'Unknown Corridor'}</div>
+                          <div className="card-name">{getDisplayName(geom)}</div>
                         </div>
                         <ScoreRing score={data.congestion_score} maxScore={maxScore} color={color} />
                       </div>
@@ -802,7 +700,7 @@ export default function App() {
                         <span className="card-score-val" style={{ color }}>{data.congestion_score.toFixed(1)}</span>
                       </div>
                       <div className="card-rank">Algorithm Rank #{data.rank}</div>
-                      <div className="card-hint">Click for full details →</div>
+                      <div className="card-hint">Click for full details ➔</div>
                     </div>
                   );
                 })}
@@ -812,7 +710,7 @@ export default function App() {
               <div className="viz-row">
                 {/* Map */}
                 <div className="glass-panel map-panel" aria-label="Live traffic map">
-                  <div className="panel-title">🗺 Live Traffic Map — Kalinga Hospital Junction</div>
+                  <div className="panel-title">🚦 Live Traffic Map – Kalinga Hospital Junction</div>
                   <div className="map-wrap">
                     <MapContainer
                       center={CENTER} zoom={15}
@@ -824,63 +722,63 @@ export default function App() {
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         attribution="&copy; OpenStreetMap contributors"
                       />
-                      {routeEntries.map(([id, data]) => {
-                        const geom = ROUTE_GEOMETRIES[id];
-                        if (!geom) return null;
-                        const color = STATUS_COLOR[data.status];
-                        const hist = history[id] || {};
-                        const isAlternate = routeEntries.some(([_, rData]) => rData.status === 'HIGH' && rData.alternate_route === id);
-                        
-                        return (
-                          <React.Fragment key={id}>
-                            <Polyline 
-                              positions={geom.positions} 
-                              color={isAlternate ? '#2ed573' : color} 
-                              weight={isAlternate ? 10 : 9} 
-                              opacity={isAlternate ? 1 : 0.9}
-                              dashArray={isAlternate ? "10, 15" : ""}
-                              className={isAlternate ? "path-alternate" : ""}
-                            >
-                              <Popup>
-                                <div className="popup-inner">
-                                  <strong style={{ color, fontSize: 15 }}>
-                                    {id.replace('route', 'Route ').toUpperCase()}
-                                  </strong>
-                                  <p style={{ color: '#64748b', fontSize: 12, margin: '2px 0 10px' }}>{geom.name}</p>
-                                  <div className="popup-stat-row">
-                                    <span>⚡ Speed:</span>
-                                    <strong>{hist.speed?.toFixed(2)} m/s</strong>
-                                  </div>
-                                  <div className="popup-stat-row">
-                                    <span>💨 CO₂:</span>
-                                    <strong>{hist.co2_emission?.toFixed(1)} mg</strong>
-                                  </div>
-                                  <div className="popup-stat-row">
-                                    <span>📊 FAHP Score:</span>
-                                    <strong style={{ color }}>{data.congestion_score?.toFixed(2)}</strong>
-                                  </div>
-                                  {data.hybrid_score && (
+                      {[...routeEntries]
+                        .sort((a, b) => {
+                          const order = { LOW: 1, MEDIUM: 2, HIGH: 3 };
+                          return (order[a[1].status] || 0) - (order[b[1].status] || 0);
+                        })
+                        .map(([id, data]) => {
+                          // Use backend geometry for popup naming
+                          const geom = { positions: congestion[id]?.geometry || [] };
+                          if (!geom.positions?.length) return null;
+                          const color = STATUS_COLOR[data.status] || STATUS_COLOR[data.congestion_tier] || '#888';
+                          const hist = history[id] || {};
+                          const isAlternate = routeEntries.some(([_, rData]) => rData.status === 'HIGH' && rData.alternate_route === id && data.status !== 'HIGH');
+
+                          return (
+                            <React.Fragment key={id}>
+                              <Polyline 
+                                positions={geom.positions} 
+                                color={isAlternate ? '#2ed573' : color} 
+                                weight={isAlternate ? 10 : 8} 
+                                opacity={isAlternate ? 1 : 0.9}
+                                dashArray={isAlternate ? "10, 15" : ""}
+                                className={isAlternate ? "path-alternate" : ""}
+                              >
+                                <Popup>
+                                  <div className="popup-inner">
+                                    <strong style={{ color, fontSize: 15 }}>
+                                      {id.replace('route', 'Route ').toUpperCase()}
+                                    </strong>
+                                    <p style={{ color: '#64748b', fontSize: 12, margin: '2px 0 10px' }}>{getDisplayName(geom)}</p>
                                     <div className="popup-stat-row">
-                                      <span>🧠 Hybrid Score:</span>
-                                      <strong style={{ color: '#a78bfa' }}>{data.hybrid_score?.toFixed(2)}</strong>
+                                      <span>🚀 Speed:</span>
+                                      <strong>{hist.speed?.toFixed(2)} m/s</strong>
                                     </div>
-                                  )}
-                                  <div className="popup-stat-row">
-                                    <span>🚦 Status:</span>
-                                    <strong style={{ color }}>{data.status}</strong>
+                                    <div className="popup-stat-row">
+                                      <span>🌿 CO₂:</span>
+                                      <strong>{hist.co2_emission?.toFixed(1)} mg</strong>
+                                    </div>
+                                    <div className="popup-stat-row">
+                                      <span>📊 FAHP Score:</span>
+                                      <strong style={{ color }}>{data.congestion_score?.toFixed(2)}</strong>
+                                    </div>
+                                    <div className="popup-stat-row">
+                                      <span>⚠️ Status:</span>
+                                      <strong style={{ color }}>{data.status}</strong>
+                                    </div>
                                   </div>
-                                </div>
-                              </Popup>
-                            </Polyline>
-                            {/* Route Start Node */}
-                            <CircleMarker 
-                              center={geom.positions[0]} 
-                              radius={6} 
-                              pathOptions={{ color: '#fff', fillColor: color, fillOpacity: 1, weight: 2 }} 
-                            />
-                          </React.Fragment>
-                        );
-                      })}
+                                </Popup>
+                              </Polyline>
+                              {/* Route Start Node */}
+                              <CircleMarker 
+                                center={geom.positions[0]} 
+                                radius={6} 
+                                pathOptions={{ color: '#fff', fillColor: color, fillOpacity: 1, weight: 2 }} 
+                              />
+                            </React.Fragment>
+                          );
+                        })}
                       <Marker position={CENTER}>
                         <Popup>
                           <strong style={{ color: '#0f172a' }}>Kalinga Hospital Junction</strong>
@@ -918,16 +816,19 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              {/* Data source footer */}
+              <div className="data-source-footer">Data based on SUMO-simulated traffic for Bhubaneswar / Kalinga Hospital Junction.</div>
             </div>
           )}
 
-          {/* ── ANALYTICS TAB ── */}
+          {/* Analytics Tab */}
           {activeTab === 'analytics' && (
             <div className="tab-content">
               <div className="analytics-grid">
                 {/* Radar Chart */}
                 <div className="glass-panel" aria-label="Multi-parameter radar chart">
-                  <div className="panel-title">🕸 Multi-Parameter Radar Analysis</div>
+                  <div className="panel-title">📡 Multi-Parameter Radar Analysis</div>
                   <div style={{ height: 420, padding: '16px 8px' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <RadarChart data={radarData} margin={{ top: 10, right: 30, bottom: 10, left: 30 }}>
@@ -963,7 +864,7 @@ export default function App() {
 
                 {/* Emissions Grouped Bar */}
                 <div className="glass-panel" aria-label="Emissions comparison chart">
-                  <div className="panel-title">📉 CO vs NOx Emissions by Route</div>
+                  <div className="panel-title">⚡ CO vs NOx Emissions by Route</div>
                   <div style={{ height: 420, padding: '20px 8px 16px' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={emissionsData} margin={{ top: 8, right: 16, left: -10, bottom: 0 }}>
@@ -979,15 +880,16 @@ export default function App() {
                   </div>
                 </div>
               </div>
+              <div className="data-source-footer">Data based on SUMO-simulated traffic for Bhubaneswar / Kalinga Hospital Junction.</div>
             </div>
           )}
 
-          {/* ── EMISSIONS TAB ── */}
+          {/* Emissions Tab */}
           {activeTab === 'emissions' && (
             <div className="tab-content">
               {/* Summary Table */}
               <div className="glass-panel" style={{ marginBottom: 24 }} aria-label="Emissions data table">
-                <div className="panel-title">🌿 Emissions Summary Table — All Routes</div>
+                <div className="panel-title">⚡ Emissions Summary Table – All Routes</div>
                 <div className="emissions-table">
                   <div className="em-header">
                     <span>Route</span>
@@ -1002,9 +904,7 @@ export default function App() {
                     const color = STATUS_COLOR[cdata?.status] || '#888';
                     return (
                       <div key={id} className="em-row">
-                        <span className="em-route" style={{ color }}>
-                          {id.replace('route', 'Route ').toUpperCase()}
-                        </span>
+                        <span className="em-route" style={{ color }}>{id.replace('route', 'Route ').toUpperCase()}</span>
                         <span>{d.speed?.toFixed(2) ?? '—'}</span>
                         <span>{d.co_emission?.toFixed(2) ?? '—'}</span>
                         <span>{d.co2_emission?.toFixed(1) ?? '—'}</span>
@@ -1038,17 +938,13 @@ export default function App() {
                     <div key={id} className="glass-panel emission-card">
                       <div className="em-card-header" style={{ color }}>
                         {id.replace('route', 'Route ').toUpperCase()}
-                        <span className="em-badge" style={{ background: color + '18', color }}>
-                          {cdata?.status ?? '—'}
-                        </span>
+                        <span className="em-badge" style={{ background: color + '18', color }}>{cdata?.status ?? '—'}</span>
                       </div>
                       {bars.map(bar => (
                         <div key={bar.label} className="bar-item">
                           <div className="bar-label-row">
                             <span>{bar.label}</span>
-                            <span style={{ color: bar.color, fontWeight: 600 }}>
-                              {bar.value?.toFixed(2)} {bar.unit}
-                            </span>
+                            <span style={{ color: bar.color, fontWeight: 600 }}>{bar.value?.toFixed(2)} {bar.unit}</span>
                           </div>
                           <div className="bar-track">
                             <div
@@ -1062,157 +958,126 @@ export default function App() {
                           </div>
                         </div>
                       ))}
->>>>>>> origin/feature/dashboard-api-fixes
                     </div>
                   );
                 })}
               </div>
+              <div className="data-source-footer">Data based on SUMO-simulated traffic for Bhubaneswar / Kalinga Hospital Junction.</div>
             </div>
-<<<<<<< HEAD
-          </div>
-
-        </div>
-
-        {/* 4. Bottom Row: Charts */}
-        <div className="bottom-row">
-          <div className="panel">
-            <div className="panel-header">Top 10 Congestion Scores</div>
-            <div className="panel-content no-pad" style={{ height: '300px', padding: '1rem' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 25 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
-                  <XAxis 
-                    dataKey="name" 
-                    stroke="var(--text-secondary)" 
-                    fontSize={11} 
-                    tickLine={false} 
-                    axisLine={false} 
-                    angle={-25}
-                    textAnchor="end"
-                  />
-                  <YAxis stroke="var(--text-secondary)" fontSize={12} tickLine={false} axisLine={false} />
-                  <Tooltip 
-                    cursor={{fill: 'rgba(0,0,0,0.05)'}} 
-                    contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px' }}
-                  />
-                  <Bar dataKey="score" radius={[4, 4, 0, 0]}>
-                    {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLOR_MAP[entry.status]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          
-          <div className="panel">
-            <div className="panel-header">FAHP vs Entropy Rank Comparison (Top 10)</div>
-            <div className="panel-content no-pad" style={{ height: '300px', padding: '1rem' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={rankComparisonData} margin={{ top: 10, right: 10, left: -10, bottom: 25 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
-                  <XAxis 
-                    dataKey="name" 
-                    stroke="var(--text-secondary)" 
-                    fontSize={11} 
-                    tickLine={false} 
-                    axisLine={false} 
-                    angle={-25}
-                    textAnchor="end"
-                  />
-                  <YAxis 
-                    stroke="var(--text-secondary)" 
-                    fontSize={12} 
-                    tickLine={false} 
-                    axisLine={false} 
-                    reversed 
-                    domain={[1, 359]} 
-                  />
-                  <Tooltip 
-                    cursor={{fill: 'rgba(0,0,0,0.05)'}} 
-                    contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px' }}
-                  />
-                  <Bar dataKey="fahp_rank" name="FAHP Rank" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="entropy_rank" name="Entropy Rank" fill="var(--color-medium)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-      </main>
-=======
           )}
 
-          {/* ── RANKINGS TAB ── */}
+          {/* Rankings Tab */}
           {activeTab === 'rankings' && (
             <div className="tab-content">
               <div className="glass-panel" aria-label="Route rankings table">
-                <div className="panel-title">🏆 FAHP Route Rankings — Congestion Severity</div>
-                <div className="rank-table">
-                  <div className="rank-header" role="row">
-                    <span className="rank-th" onClick={() => handleSort('rank')} role="columnheader">
-                      Rank {sortKey === 'rank' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
-                    </span>
-                    <span className="rank-th" onClick={() => handleSort('id')} role="columnheader">
-                      Route {sortKey === 'id' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
-                    </span>
-                    <span className="rank-th" onClick={() => handleSort('congestion_score')} role="columnheader">
-                      FAHP Score {sortKey === 'congestion_score' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
-                    </span>
-                    <span className="rank-th" onClick={() => handleSort('status')} role="columnheader">
-                      Status {sortKey === 'status' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
-                    </span>
-                    <span className="rank-th" role="columnheader">Actions</span>
-                  </div>
-
-                  {sortedRoutes.map(([id, data], idx) => {
-                    const color = STATUS_COLOR[data.status] || '#888';
-                    return (
-                      <div
-                        key={id}
-                        className="rank-row"
-                        style={{ animationDelay: `${idx * 55}ms` }}
-                        role="row"
-                      >
-                        <span className="rank-medal">
-                          {data.rank === 1 ? '🥇' : data.rank === 2 ? '🥈' : data.rank === 3 ? '🥉' : `#${data.rank}`}
-                        </span>
-                        <span className="rank-id">
-                          {id.replace('route', 'Route ').toUpperCase()}
-                          <br />
-                          <small style={{ color: '#475569', fontWeight: 400, fontSize: 11 }}>
-                            {ROUTE_GEOMETRIES[id]?.name || ''}
-                          </small>
-                        </span>
-                        <span className="rank-score" style={{ color }}>
-                          {data.congestion_score.toFixed(2)}
-                        </span>
-                        <span>
-                          <span
-                            className="rank-badge"
-                            style={{ background: color + '18', color, border: `1px solid ${color}30` }}
-                          >
-                            {data.status}
-                          </span>
-                        </span>
-                        <button
-                          className="btn-view"
-                          onClick={() => { setSelectedRoute(id); setActiveTab('dashboard'); }}
-                          aria-label={`View details for ${id}`}
-                        >
-                          View →
-                        </button>
-                      </div>
-                    );
-                  })}
+                <div className="panel-header">
+                  <div className="panel-title">🏆 FAHP Route Rankings – Congestion Severity</div>
+                  <div className="panel-subtitle">{finalRankings.length} monitored corridors ranked by Fuzzy Analytic Hierarchy Process (FAHP) score</div>
                 </div>
+
+                <div className="table-container">
+                  <table className="rank-table">
+                    <thead>
+                      <tr>
+                        <th onClick={() => handleSort('rank')} className="sortable col-rank">
+                          Rank {sortKey === 'rank' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                        </th>
+                        <th onClick={() => handleSort('id')} className="sortable col-route">
+                          Route Corridor {sortKey === 'id' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                        </th>
+                        <th onClick={() => handleSort('congestion_score')} className="sortable col-score text-right">
+                          FAHP Score {sortKey === 'congestion_score' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                        </th>
+                        <th onClick={() => handleSort('status')} className="sortable col-tier center">
+                          Congestion Tier {sortKey === 'status' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                        </th>
+                        <th className="col-actions text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {finalRankings.map(([id, data]) => {
+                        const color = STATUS_COLOR[data.status] || '#888';
+                        const geom = { positions: congestion[id]?.geometry || [] };
+                        const isExpanded = !!expandedRows[id];
+                        return (
+                          <React.Fragment key={id}>
+                            <tr className={`rank-tr ${isExpanded ? 'row-expanded' : ''}`}>
+                              <td className="col-rank">
+                                {data.rank === 1 ? (
+                                  <span className="rank-badge rank-top1">⚠️ #1</span>
+                                ) : data.rank === 2 ? (
+                                  <span className="rank-badge rank-top2">#2</span>
+                                ) : data.rank === 3 ? (
+                                  <span className="rank-badge rank-top3">#3</span>
+                                ) : (
+                                  <span className="rank-num">#{data.rank}</span>
+                                )}
+                              </td>
+                              <td className="col-route">
+                                <div className="route-id-cell">
+                                  <span className="route-id-text">{id.replace('route', 'Route ').toUpperCase()}</span>
+                                  {isFeatured(id) && <span className="featured-badge">Featured</span>}
+                                </div>
+                                <div className="route-name-sub">{getDisplayName(geom)}</div>
+                              </td>
+                              <td className="col-score text-right">
+                                <span className="score-val" style={{ color }}>{data.congestion_score.toFixed(2)}</span>
+                              </td>
+                              <td className="col-tier center">
+                                <span className={`tier-badge tier-${(data.status || 'low').toLowerCase()}`}>
+                                  {data.status}
+                                </span>
+                              </td>
+                              <td className="col-actions text-right">
+                                <div className="actions-cell">
+                                  <button
+                                    className="btn-details"
+                                    onClick={() => setSelectedRoute(id)}
+                                    title="View complete route metrics and rerouting options"
+                                  >
+                                    View Details
+                                  </button>
+                                  <button
+                                    className="btn-toggle"
+                                    onClick={() => handleToggleReroute(id)}
+                                    title="Toggle quick breakdown"
+                                  >
+                                    {isExpanded ? 'Hide' : 'Quick View'}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                            {isExpanded && (
+                              <tr className="accordion-tr">
+                                <td colSpan={5}>
+                                  <div className="accordion-content">
+                                    <div className="acc-grid">
+                                      <div><strong>Route ID:</strong> {id.replace('route', 'Route ').toUpperCase()}</div>
+                                      <div><strong>Corridor:</strong> {getDisplayName(geom)}</div>
+                                      <div><strong>FAHP Score:</strong> {data.congestion_score.toFixed(4)}</div>
+                                      <div><strong>Algorithm Rank:</strong> #{data.rank} of {Object.keys(congestion).length}</div>
+                                      <div><strong>Status:</strong> <span style={{ color, fontWeight: 700 }}>{data.status}</span></div>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="data-source-footer">Data based on SUMO-simulated traffic for Bhubaneswar / Kalinga Hospital Junction.</div>
               </div>
             </div>
+          )}
+            </>
           )}
         </div>
       </main>
 
-      {/* ── Route Detail Modal ── */}
+      {/* Route Detail Modal */}
       {selectedRoute && (
         <RouteModal
           routeId={selectedRoute}
@@ -1221,7 +1086,6 @@ export default function App() {
           onClose={() => setSelectedRoute(null)}
         />
       )}
->>>>>>> origin/feature/dashboard-api-fixes
     </div>
   );
 }

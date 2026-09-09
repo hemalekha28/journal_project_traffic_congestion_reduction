@@ -1,57 +1,10 @@
-<<<<<<< HEAD
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
-:root {
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  
-  /* Modern Color Palette */
-  --bg-app: #f8fafc;
-  --bg-card: #ffffff;
-  --bg-header: #0f172a;
-  
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
-  --text-header: #f8fafc;
-  
-  --border-color: #e2e8f0;
-  
-  /* Congestion Colors */
-  --color-high: #ef4444;    /* Red 500 */
-  --color-medium: #f59e0b;  /* Amber 500 */
-  --color-low: #10b981;     /* Emerald 500 */
-  
-  --color-primary: #3b82f6; /* Blue 500 */
-  --color-primary-hover: #2563eb;
-  
-  /* Shadows for card effect */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-}
-
-* {
-=======
-/* Base reset — App.css handles all styling */
+/* Base reset — App.css handles layout & components */
 *, *::before, *::after {
->>>>>>> origin/feature/dashboard-api-fixes
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-<<<<<<< HEAD
-body {
-  font-family: var(--font-sans);
-  background-color: var(--bg-app);
-  color: var(--text-primary);
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-
-h1, h2, h3, h4, h5, h6 {
-  font-weight: 600;
-  line-height: 1.25;
-=======
 html, body, #root {
   height: 100%;
   width: 100%;
@@ -60,5 +13,4 @@ html, body, #root {
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
->>>>>>> origin/feature/dashboard-api-fixes
 }
