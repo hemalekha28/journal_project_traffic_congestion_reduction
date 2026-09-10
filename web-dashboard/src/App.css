@@ -1167,3 +1167,167 @@ body::before { display: none; }
   border-radius: 16px;
 }
 
+/* Toast Notification */
+.driver-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: #0f172a;
+  color: #ffffff;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: slideUpToast 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUpToast {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Share Status Button */
+.driver-share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 8px 14px;
+  border: 1px solid var(--driver-color, #2563eb);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--driver-color, #2563eb) 8%, transparent);
+  color: var(--driver-color, #2563eb);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.driver-share-btn:hover {
+  background: var(--driver-color, #2563eb);
+  color: #ffffff;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--driver-color, #2563eb) 30%, transparent);
+}
+
+/* Route Selector Wrapper & Star Button */
+.driver-select-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.driver-fav-btn {
+  padding: 8px 12px;
+  font-size: 18px;
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.driver-fav-btn:hover {
+  border-color: #f59e0b;
+  background: #fffbe6;
+  transform: scale(1.05);
+}
+
+.driver-fav-btn.is-fav {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+}
+
+.dsc-fav-tag {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #d97706;
+  background: #fef3c7;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+/* Emergency Contacts Strip */
+.driver-emergency-strip {
+  margin-top: 24px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.emergency-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.emergency-pills {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.emergency-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.emergency-pill.police {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+.emergency-pill.police:hover {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+.emergency-pill.ambulance {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+.emergency-pill.ambulance:hover {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.emergency-pill.assistance {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+

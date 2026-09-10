@@ -287,7 +287,56 @@ export default function App() {
   const [sortDir, setSortDir]             = useState('asc');
   const [viewMode, setViewMode]           = useState('authority'); // 'authority' | 'driver'
   const [driverRouteId, setDriverRouteId] = useState('!257');
+  const [toastMsg, setToastMsg]           = useState('');
   const countdownRef = useRef(null);
+
+  // Local-only favorite routes stored in browser localStorage. Does not sync across devices.
+  const [favoriteRoutes, setFavoriteRoutes] = useState(() => {
+    try {
+      const saved = localStorage.getItem('trafficiq_favorite_routes');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const toggleFavoriteRoute = (routeId) => {
+    setFavoriteRoutes(prev => {
+      const isFav = prev.includes(routeId);
+      const next = isFav ? prev.filter(id => id !== routeId) : [...prev, routeId];
+      try {
+        localStorage.setItem('trafficiq_favorite_routes', JSON.stringify(next));
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
+  };
+
+  const handleShareStatus = (routeId, selData, rerouteInfo) => {
+    const routeLabel = routeId.replace('route', 'Route ').toUpperCase();
+    let text = "";
+    if (rerouteInfo?.available) {
+      const savings = rerouteInfo.savings || '3.3%';
+      text = `Heavy traffic on my route (${routeLabel}). An alternate route could save ~${savings} travel time.`;
+    } else if (selData?.status === 'HIGH' || selData?.status === 'MEDIUM') {
+      text = `Heavy traffic on my route (${routeLabel}). Status: ${selData.status}. Running approx late.`;
+    } else {
+      text = `Traffic is flowing normally on my route (${routeLabel}).`;
+    }
+
+    if (navigator.share) {
+      navigator.share({ title: 'Traffic Status', text }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(text).then(() => {
+        setToastMsg('Copied status to clipboard!');
+        setTimeout(() => setToastMsg(''), 3000);
+      }).catch(() => {
+        setToastMsg('Copied status to clipboard!');
+        setTimeout(() => setToastMsg(''), 3000);
+      });
+    }
+  };
 
   // Fetch all data
   const fetchData = useCallback(async () => {
@@ -531,18 +580,52 @@ export default function App() {
                 </div>
                 <div className="driver-selector-wrap">
                   <label htmlFor="driver-route-select" className="driver-select-label">Choose your route:</label>
-                  <select
-                    id="driver-route-select"
-                    className="driver-select"
-                    value={driverRouteId}
-                    onChange={e => setDriverRouteId(e.target.value)}
-                  >
-                    {routeEntries.map(([id, data]) => (
-                      <option key={id} value={id}>
-                        {id.replace('route', 'Route ').toUpperCase()} — {data.status} CONGESTION (Score: {data.congestion_score.toFixed(1)})
-                      </option>
-                    ))}
-                  </select>
+                  <div className="driver-select-group">
+                    <select
+                      id="driver-route-select"
+                      className="driver-select"
+                      value={driverRouteId}
+                      onChange={e => setDriverRouteId(e.target.value)}
+                    >
+                      {(() => {
+                        const favEntries = routeEntries.filter(([id]) => favoriteRoutes.includes(id));
+                        const otherEntries = routeEntries.filter(([id]) => !favoriteRoutes.includes(id));
+                        if (favEntries.length > 0) {
+                          return (
+                            <>
+                              <optgroup label="⭐ Favorited Routes">
+                                {favEntries.map(([id, data]) => (
+                                  <option key={id} value={id}>
+                                    ⭐ {id.replace('route', 'Route ').toUpperCase()} — {data.status} CONGESTION (Score: {data.congestion_score.toFixed(1)})
+                                  </option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="All Corridors">
+                                {otherEntries.map(([id, data]) => (
+                                  <option key={id} value={id}>
+                                    {id.replace('route', 'Route ').toUpperCase()} — {data.status} CONGESTION (Score: {data.congestion_score.toFixed(1)})
+                                  </option>
+                                ))}
+                              </optgroup>
+                            </>
+                          );
+                        }
+                        return routeEntries.map(([id, data]) => (
+                          <option key={id} value={id}>
+                            {id.replace('route', 'Route ').toUpperCase()} — {data.status} CONGESTION (Score: {data.congestion_score.toFixed(1)})
+                          </option>
+                        ));
+                      })()}
+                    </select>
+                    <button
+                      className={`driver-fav-btn ${favoriteRoutes.includes(driverRouteId) ? 'is-fav' : ''}`}
+                      onClick={() => toggleFavoriteRoute(driverRouteId)}
+                      title={favoriteRoutes.includes(driverRouteId) ? 'Unstar route' : 'Star route (remember locally)'}
+                      aria-label="Star or favorite route"
+                    >
+                      {favoriteRoutes.includes(driverRouteId) ? '⭐' : '☆'}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -561,8 +644,18 @@ export default function App() {
                       <div className="dsc-icon">{statusInfo.icon}</div>
                       <div className="dsc-body">
                         <div className="dsc-label" style={{ color: statusInfo.color }}>{statusInfo.label}</div>
-                        <div className="dsc-route">{driverRouteId.replace('route', 'Route ').toUpperCase()}</div>
+                        <div className="dsc-route">
+                          {driverRouteId.replace('route', 'Route ').toUpperCase()}
+                          {favoriteRoutes.includes(driverRouteId) && <span className="dsc-fav-tag">⭐ Favorite</span>}
+                        </div>
                         <p className="dsc-desc">{statusInfo.desc}</p>
+                        <button
+                          className="driver-share-btn"
+                          onClick={() => handleShareStatus(driverRouteId, selData, rerouteInfo)}
+                          title="Share route status"
+                        >
+                          🔗 Share Status
+                        </button>
                       </div>
                       <div className="dsc-badge" style={{ background: statusInfo.color + '22', color: statusInfo.color, border: `1px solid ${statusInfo.color}44` }}>
                         {selData.status}
@@ -618,6 +711,22 @@ export default function App() {
                       </button>
                     );
                   })}
+                </div>
+              </div>
+
+              {/* Emergency Contacts Strip */}
+              <div className="driver-emergency-strip">
+                <div className="emergency-title">🚨 Emergency Contacts</div>
+                <div className="emergency-pills">
+                  <a href="tel:112" className="emergency-pill police">
+                    🚓 Police (112)
+                  </a>
+                  <a href="tel:108" className="emergency-pill ambulance">
+                    🚑 Ambulance (108)
+                  </a>
+                  <span className="emergency-pill assistance">
+                    🛠 Check local roadside assistance
+                  </span>
                 </div>
               </div>
             </div>
@@ -1076,6 +1185,13 @@ export default function App() {
           )}
         </div>
       </main>
+
+      {/* Toast Notification */}
+      {toastMsg && (
+        <div className="driver-toast">
+          <span>📋</span> {toastMsg}
+        </div>
+      )}
 
       {/* Route Detail Modal */}
       {selectedRoute && (
