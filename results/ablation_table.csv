@@ -1,0 +1,4 @@
+weighting_method,route_count,data_source,silhouette_score,davies_bouldin_index,anova_f_value_speed,computation_time_sec
+FAHP (Base Paper),4,SUMO,0.099,0.3507,17.4246,0.0171
+FAHP (Our Pipeline),359,SUMO,0.4707,0.7769,32.7783,0.7947
+Entropy Weighting (Our Pipeline),359,SUMO,0.4707,0.7769,32.7783,0.8195

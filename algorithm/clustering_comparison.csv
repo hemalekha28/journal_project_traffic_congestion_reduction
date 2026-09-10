@@ -1,5 +1,5 @@
 Method,Silhouette Score,Davies-Bouldin Index,Cluster Count,Runtime (ms)
-Fuzzy K-Means (FKM),0.4708,0.7788,3,789.87
-K-Means,0.4667,0.7836,3,261.56
-Gaussian Mixture Model (GMM),0.4686,0.8665,3,26.47
-DBSCAN,0.7612,0.2638,2,1.51
+Fuzzy K-Means (FKM),0.4707,0.7769,3,652.15
+K-Means,0.4807,0.7682,3,230.85
+Gaussian Mixture Model (GMM),0.468,0.8138,3,29.73
+DBSCAN,0.7882,0.1917,2,2.76
