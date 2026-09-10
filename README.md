@@ -2,8 +2,6 @@
 
 > **VANET-based Real-Time Congestion Detection, Predictive Forecasting, Adaptive Signal Control, and Google Maps Navigation Platform.**
 
-Base paper: Mohanty et al., *"Integrating Cognitive Intelligence and VANET for Effective Traffic Congestion Detection in Smart Urban Mobility"*, IEEE Access 2025.
-
 ---
 
 ## 📌 Executive Summary & Purpose
@@ -41,12 +39,6 @@ flowchart TD
         I --> J
     end
 ```
-
----
-
-## 🔄 End-to-End Pipeline
-
-SUMO simulation → sensor fusion → FKM clustering → FAHP scoring → Flask API → React dashboard
 
 ---
 
@@ -107,58 +99,28 @@ SUMO simulation → sensor fusion → FKM clustering → FAHP scoring → Flask 
 ### Prerequisites
 - **Python 3.8+**
 - **Node.js (v18+)** and **npm**
-- **SUMO** (optional for generating raw TraCI traces)
 
 ---
 
-### Step 1: SUMO Simulation & TraCI Data Generation (Optional)
-Install SUMO, set `SUMO_HOME`, then from `simulation/sumo_config/`:
-```bash
-netconvert --osm-files map.osm --output-file network.net.xml \
-  --geometry.remove --roundabouts.guess --ramps.guess \
-  --junctions.join --tls.guess-signals --tls.discard-simple --tls.join
-
-python "%SUMO_HOME%/tools/randomTrips.py" -n network.net.xml -r routes.rou.xml -e 3600 -p 10
-```
-
-Generate simulation data:
-```bash
-cd simulation
-python traci_runner.py
-# OR, if SUMO isn't ready yet:
-python generate_fallback_data.py
-```
-
----
-
-### Step 2: Run Algorithm Pipeline
-```bash
-cd algorithm
-python sensor_fusion.py
-python fkm_clustering.py
-python fahp.py
-```
-
----
-
-### Step 3: Run Backend API Server
+### Step 1: Run the Backend API Server
 
 ```powershell
 cd backend
+.\venv\Scripts\Activate.ps1
 python main.py
 ```
 > Server will start at **`http://127.0.0.1:5000`**.
 
 ---
 
-### Step 4: Run Web Dashboard Frontend
+### Step 2: Run the Web Dashboard Frontend
 
 ```powershell
 cd web-dashboard
 npm install
 npm run dev
 ```
-> Access the web dashboard at **`http://localhost:5173`** (or **`http://localhost:3000`**).
+> Access the web dashboard at **`http://localhost:5173`**.
 
 ---
 
