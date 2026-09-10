@@ -686,6 +686,22 @@ export default function App() {
                 );
               })()}
 
+              {/* Emergency Contacts Strip */}
+              <div className="driver-emergency-strip">
+                <div className="emergency-title">🚨 Emergency Contacts</div>
+                <div className="emergency-pills">
+                  <a href="tel:112" className="emergency-pill police">
+                    🚓 Police (112)
+                  </a>
+                  <a href="tel:108" className="emergency-pill ambulance">
+                    🚑 Ambulance (108)
+                  </a>
+                  <span className="emergency-pill assistance">
+                    🛠 Check local roadside assistance
+                  </span>
+                </div>
+              </div>
+
               {/* All Routes Quick Overview */}
               <div className="driver-overview-section">
                 <div className="driver-section-title">📍 All Monitored Corridors</div>
@@ -711,22 +727,6 @@ export default function App() {
                       </button>
                     );
                   })}
-                </div>
-              </div>
-
-              {/* Emergency Contacts Strip */}
-              <div className="driver-emergency-strip">
-                <div className="emergency-title">🚨 Emergency Contacts</div>
-                <div className="emergency-pills">
-                  <a href="tel:112" className="emergency-pill police">
-                    🚓 Police (112)
-                  </a>
-                  <a href="tel:108" className="emergency-pill ambulance">
-                    🚑 Ambulance (108)
-                  </a>
-                  <span className="emergency-pill assistance">
-                    🛠 Check local roadside assistance
-                  </span>
                 </div>
               </div>
             </div>
